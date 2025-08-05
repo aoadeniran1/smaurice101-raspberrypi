@@ -15,7 +15,13 @@ sys.dont_write_bytecode = True
 ######################################## USER CHOOSEN PARAMETERS ########################################
 default_args = {
   'topic' : 'iot-preprocess,iot-preprocess2',    # <<< *** Separate multiple topics by a comma - Viperviz will stream data from these topics to your browser
-  'dashboardhtml': 'dashboard.html', # <<< *** name of your dashboard html file  try: iot-failure-seneca.html
+  'dashboardhtml': 'dashboard.html', # <<< *** name of your dashboard file: This one is ONLY for preprocessing
+  'dashboardhtml-ml': 'dashboard-ml.html', # <<< *** This one is IF you include ML dag
+  'topic-ml' : 'iot-preprocess,iot-preprocess2',    # <<< *** Separate multiple topics by a comma
+  'dashboardhtml-ai': 'dashboard-ai.html', # <<< *** This one is you include AI dag
+  'topic-ai' : 'iot-preprocess,iot-preprocess2',    # <<< *** Separate multiple topics by a comma  
+  'dashboardhtml-ml-ai': 'dashboard-ml-ai.html', # <<< *** This one is you include ML-AI dag
+  'topic-ml-ai' : 'iot-preprocess,iot-preprocess2',    # <<< *** Separate multiple topics by a comma    
   'secure': '1',   # <<< *** 1=connection is encrypted, 0=no encryption
   'offset' : '-1',    # <<< *** -1 indicates to read from the last offset always
   'append' : '0',   # << ** Do not append new data in the browser
@@ -23,13 +29,6 @@ default_args = {
 }
 
 ######################################## DO NOT MODIFY BELOW #############################################
-
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_7_kafka_visualization_dag", default_args=default_args, tags=["tml_system_step_7_kafka_visualization_dag"], schedule=None,catchup=False)
-def startstreaming():    
-  def empty():
-      pass
-dag = startstreaming()
 
 def windowname(wtype,vipervizport,sname,dagname):
     randomNumber = random.randrange(10, 9999)
@@ -56,17 +55,28 @@ def startstreamingengine(**context):
         vipervizport = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERVIZPORT".format(sname)) 
         solutionvipervizport = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_SOLUTIONVIPERVIZPORT".format(sname)) 
         tss = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_TSS".format(sname)) 
-    
-        topic = default_args['topic']
+
+        if '_ml_ai_' in sd:
+          topic = default_args['topic-ml-ai']
+          dashboardhtml = default_args['dashboardhtml-ml-ai']  
+        elif '_ai_' in sd:
+          topic = default_args['topic-ai']
+          dashboardhtml = default_args['dashboardhtml-ai']
+        elif '_ml_' in sd:  
+          topic = default_args['topic-ml']
+          dashboardhtml = default_args['dashboardhtml-ml']
+        else:  
+          topic = default_args['topic']
+          dashboardhtml = default_args['dashboardhtml']
+
         secure = default_args['secure']
         offset = default_args['offset']
         append = default_args['append']
         rollbackoffset = default_args['rollbackoffset']
-        dashboardhtml = default_args['dashboardhtml']
                 
         ti = context['task_instance']
-        ti.xcom_push(key="{}_topic".format(sname),value=topic)
-        ti.xcom_push(key="{}_dashboardhtml".format(sname),value=dashboardhtml)        
+        ti.xcom_push(key="{}_topic".format(sname),value="{}".format(topic))
+        ti.xcom_push(key="{}_dashboardhtml".format(sname),value="{}".format(dashboardhtml))        
         ti.xcom_push(key="{}_secure".format(sname),value="_{}".format(secure))
         ti.xcom_push(key="{}_offset".format(sname),value="_{}".format(offset))
         ti.xcom_push(key="{}_append".format(sname),value="_{}".format(append))

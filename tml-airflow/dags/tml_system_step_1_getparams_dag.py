@@ -21,16 +21,16 @@ default_args = {
  'cloudpassword' : '',  # <<<< --THIS WILL BE UPDATED FOR YOU IF USING KAFKA CLOUD WITH API SECRET - LEAVE BLANK   
  'solutionname': '_mysolution_',   # <<< *** DO NOT MODIFY - THIS WILL BE AUTOMATICALLY UPDATED
  'solutiontitle': 'My Solution Title', # <<< *** Provide a descriptive title for your solution
- 'solutionairflowport' : '-1', # << If -1, TSS will choose a free port randonly, or set this to a fixed number
- 'solutionexternalport' : '-1', # << If -1, TSS will choose a free port randonly, or set this to a fixed number
- 'solutionvipervizport' : '-1', # << If -1, TSS will choose a free port randonly, or set this to a fixed number   
+ 'solutionairflowport' : '4040', # << If -1, TSS will choose a free port randonly, or set this to a fixed number
+ 'solutionexternalport' : '5050', # << If -1, TSS will choose a free port randonly, or set this to a fixed number
+ 'solutionvipervizport' : '6060', # << If -1, TSS will choose a free port randonly, or set this to a fixed number   
  'description': 'This is an awesome real-time solution built by TSS',   # <<< *** Provide a description of your solution
  'HTTPADDR' : 'https://',
  'COMPANYNAME' : 'My company',       
  'WRITELASTCOMMIT' : '0',   ## <<<<<<<<< ******************** FOR DETAILS ON BELOW PARAMETER SEE: https://tml.readthedocs.io/en/latest/viper.html
  'NOWINDOWOVERLAP' : '0',
  'NUMWINDOWSFORDUPLICATECHECK' : '5',
- 'DATARETENTIONINMINUTES' : '30',
+ 'DATARETENTIONINMINUTES' : '1440',
  'USEHTTP' : '0',
  'ONPREM' : '0',
  'WRITETOVIPERDB' : '0',
@@ -55,6 +55,10 @@ default_args = {
  'MYSQLMAXLIFETIMEMINUTES' : '4',
  'MYSQLMAXCONN' : '4',
  'MYSQLMAXIDLE' : '10',
+ 'MYSQLHOSTNAME' : '127.0.0.1:3306',   
+ 'KUBEMYSQLHOSTNAME' : 'mysql-service:3306', # this is the mysql service in kubernetes   
+ 'MYSQLDB' : 'tmlids',
+ 'MYSQLUSER' : 'root',    
  'SASLMECHANISM' : 'PLAIN',
  'MINFORECASTACCURACY' : '55',
  'COMPRESSIONTYPE' : 'gzip',
@@ -71,14 +75,6 @@ default_args = {
 }
 
 ############################################################### DO NOT MODIFY BELOW ####################################################
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_1_getparams_dag", default_args=default_args, tags=["tml_system_step_1_getparams_dag"], schedule=None, catchup=False)
-def tmlparams():
-    # Define tasks
-    def empty():
-        pass
-dag = tmlparams()
-
     
 def reinitbinaries(sname):  
     pywindowfiles=glob.glob("/tmux/pythonwindows_*") 
@@ -117,7 +113,10 @@ def reinitbinaries(sname):
     # copy folders
     shutil.copytree("/tss_readthedocs", "/{}".format(sname),dirs_exist_ok=True)
     #remove local logs
-    os.remove('/dagslocalbackup/logs.txt')    
+    try:
+      os.remove('/dagslocalbackup/logs.txt')    
+    except Exception as e:
+      pass 
         
 def updateviperenv():
     # update ALL
@@ -131,12 +130,29 @@ def updateviperenv():
           cloudusername = os.environ['KAFKACLOUDUSERNAME']
     if 'KAFKACLOUDPASSWORD' in os.environ:
           cloudpassword = os.environ['KAFKACLOUDPASSWORD']
-
+    if 'KAFKABROKERHOST' in os.environ:
+          default_args['brokerhost'] = os.environ['KAFKABROKERHOST']
+          default_args['brokerport']=''
+    if 'SASLMECHANISM' in os.environ:
+       default_args['SASLMECHANISM']=os.environ['SASLMECHANISM']     
+     
     if '127.0.0.1' in default_args['brokerhost']:
       cloudusername = ""
       cloudpassword = ""
-        
-    filepaths = ['/Viper-produce/viper.env','/Viper-preprocess/viper.env','/Viper-preprocess-pgpt/viper.env','/Viper-preprocess2/viper.env','/Viper-ml/viper.env','/Viper-predict/viper.env','/Viperviz/viper.env']
+      if 'KUBE' in os.environ:
+         if os.environ['KUBE'] == "1":
+          if 'KAFKABROKERHOST' in os.environ:
+              default_args['brokerhost'] = os.environ['KAFKABROKERHOST']
+              default_args['brokerport']=''
+          if "KUBEBROKERHOST" in os.environ:
+              buf = os.environ['KUBEBROKERHOST'] 
+              sp = buf.split(":")
+              default_args['brokerhost']=sp[0]
+              default_args['brokerport']=sp[1]        
+          else: 
+             default_args['brokerhost']="kafka-service"
+           
+    filepaths = ['/Viper-produce/viper.env','/Viper-preprocess/viper.env','/Viper-preprocess1/viper.env','/Viper-preprocess-pgpt/viper.env','/Viper-preprocess2/viper.env','/Viper-preprocess3/viper.env','/Viper-ml/viper.env','/Viper-predict/viper.env','/Viperviz/viper.env']
     for mainfile in filepaths:
      with open(mainfile, 'r', encoding='utf-8') as file: 
        data = file.readlines() 
@@ -237,6 +253,18 @@ def updateviperenv():
          data[r] = "KUBERNETES={}\n".format(default_args['KUBERNETES'])                
        if 'COMPANYNAME' in d: 
          data[r] = "COMPANYNAME={}\n".format(default_args['COMPANYNAME'])                
+       if 'MYSQLHOSTNAME' in d: 
+         if "KUBE" in os.environ:
+           if os.environ["KUBE"] == "1":
+            data[r] = "MYSQLHOSTNAME={}\n".format(default_args['KUBEMYSQLHOSTNAME'])            
+           else: 
+            data[r] = "MYSQLHOSTNAME={}\n".format(default_args['MYSQLHOSTNAME'])            
+         else: 
+           data[r] = "MYSQLHOSTNAME={}\n".format(default_args['MYSQLHOSTNAME'])                
+       if 'MYSQLDB' in d: 
+         data[r] = "MYSQLDB={}\n".format(default_args['MYSQLDB'])                
+       if 'MYSQLUSER' in d: 
+         data[r] = "MYSQLUSER={}\n".format(default_args['MYSQLUSER'])                
 
        r += 1
      with open(mainfile, 'w', encoding='utf-8') as file: 
@@ -257,10 +285,59 @@ def getparams(**context):
   HPDEPORTPREDICT = ""
 
   tsslogging.locallogs("INFO", "STEP 1: Build started") 
-    
-  sname = args['solutionname']    
-  desc = args['description']        
-  stitle = args['solutiontitle']    
+
+  try: 
+    if os.environ['TSS']=="1":
+     if 'READTHEDOCS' in os.environ:
+      if  len(os.environ['READTHEDOCS']) < 4:
+        sys.exit()
+      f = open("/tmux/rd4.txt", "w") 
+      rd=os.environ['READTHEDOCS']
+      f.write(rd[:4])
+      f.close()
+     else:
+       sys.exit() 
+  except Exception as e:
+    pass
+
+  if os.environ['TSS']=="1":
+    try: 
+      shutil.rmtree("/rawdata/rtms") 
+    except Exception as e:
+       pass
+    try: 
+       with open("/tmux/step5.txt", "r") as f:
+           dirbuf=f.read()
+           shutil.rmtree(dirbuf) 
+    except Exception as e:
+      pass
+ 
+  sd = context['dag'].dag_id 
+  pname = args['solutionname']    
+  sname = tsslogging.rtdsolution(pname,sd)
+  try: 
+    f = open("/tmux/step1projectname.txt", "w")
+    f.write(pname)
+    f.close()
+  except Exception as e:
+    pass
+
+  try: 
+    f = open("/tmux/step1solution.txt", "w")
+    f.write(sname)
+    f.close()
+  except Exception as e:
+    pass
+ 
+  if 'step1description' in os.environ:
+    desc = os.environ['step1description']
+  else: 
+    desc = args['description']        
+
+  if 'step1solutiontitle' in os.environ:
+    stitle = os.environ['step1solutiontitle']
+  else: 
+    stitle = args['solutiontitle']    
   
   brokerhost = args['brokerhost']   
   brokerport = args['brokerport'] 
@@ -279,10 +356,18 @@ def getparams(**context):
       output = f.read()
       VIPERHOSTPREPROCESS = output.split(",")[0]
       VIPERPORTPREPROCESS = output.split(",")[1]    
+    with open('/Viper-preprocess1/viper.txt', 'r') as f:
+      output = f.read()
+      VIPERHOSTPREPROCESS1 = output.split(",")[0]
+      VIPERPORTPREPROCESS1 = output.split(",")[1]         
     with open('/Viper-preprocess2/viper.txt', 'r') as f:
       output = f.read()
       VIPERHOSTPREPROCESS2 = output.split(",")[0]
       VIPERPORTPREPROCESS2 = output.split(",")[1]        
+    with open('/Viper-preprocess3/viper.txt', 'r') as f:
+      output = f.read()
+      VIPERHOSTPREPROCESS3 = output.split(",")[0]
+      VIPERPORTPREPROCESS3 = output.split(",")[1]             
     with open('/Viper-preprocess-pgpt/viper.txt', 'r') as f:
       output = f.read()
       VIPERHOSTPREPROCESSPGPT = output.split(",")[0]
@@ -318,21 +403,57 @@ def getparams(**context):
            vipervizport=tsslogging.getfreeport()
   else:
            vipervizport=tsslogging.getfreeport()
-        
-  if default_args['solutionairflowport'] != '-1':
-           solutionairflowport = int(default_args['solutionairflowport'])
-  else:
-           solutionairflowport=tsslogging.getfreeport()
 
-  if default_args['solutionexternalport'] != '-1':
-           solutionexternalport = int(default_args['solutionexternalport'])
+  #   Check the solution airflow port and see if user modfifed port in kubernetes 
+  if default_args['solutionairflowport'] != '-1':
+          solutionairflowport = int(default_args['solutionairflowport'])
+          if 'KUBE' in os.environ:
+            if os.environ['KUBE'] == '1' and int(os.environ['SOLUTIONAIRFLOWPORT']) != '-1':
+              solutionairflowport = int(os.environ['SOLUTIONAIRFLOWPORT'])
   else:
-           solutionexternalport=tsslogging.getfreeport()
-        
+     if 'KUBE' in os.environ:
+        if os.environ['KUBE'] == "0":
+          solutionairflowport=tsslogging.getfreeport()
+        elif int(os.environ['SOLUTIONAIRFLOWPORT']) != '-1':
+         solutionairflowport=int(os.environ['SOLUTIONAIRFLOWPORT'])
+        else:
+          solutionairflowport=tsslogging.getfreeport()
+     else:    
+      solutionairflowport=tsslogging.getfreeport()
+
+  #   Check the solution external port and see if user modfifed port in kubernetes 
+  if default_args['solutionexternalport'] != '-1':
+          solutionexternalport = int(default_args['solutionexternalport'])
+          if 'KUBE' in os.environ:
+            if os.environ['KUBE'] == '1' and int(os.environ['SOLUTIONEXTERNALPORT']) != '-1':
+              solutionexternalport = int(os.environ['SOLUTIONEXTERNALPORT'])
+  else:
+     if 'KUBE' in os.environ:
+        if os.environ['KUBE'] == "0":
+          solutionexternalport=tsslogging.getfreeport()
+        elif int(os.environ['SOLUTIONEXTERNALPORT']) != '-1':
+         solutionexternalport=int(os.environ['SOLUTIONEXTERNALPORT'])
+        else:
+          solutionexternalport=tsslogging.getfreeport()
+     else:    
+      solutionexternalport=tsslogging.getfreeport()
+
+  #   Check the solution visualization port and see if user modfifed port in kubernetes
   if default_args['solutionvipervizport'] != '-1':
           solutionvipervizport = int(default_args['solutionvipervizport'])
+          if 'KUBE' in os.environ:
+            if os.environ['KUBE'] == '1' and int(os.environ['SOLUTIONVIPERVIZPORT']) != '-1':
+              solutionvipervizport = int(os.environ['SOLUTIONVIPERVIZPORT'])
   else:
-           solutionvipervizport=tsslogging.getfreeport()
+     if 'KUBE' in os.environ:
+        if os.environ['KUBE'] == "0":
+          solutionvipervizport=tsslogging.getfreeport()
+        elif int(os.environ['SOLUTIONVIPERVIZPORT']) != '-1':
+         solutionvipervizport=int(os.environ['SOLUTIONVIPERVIZPORT'])
+        else:
+          solutionvipervizport=tsslogging.getfreeport()
+     else:    
+      solutionvipervizport=tsslogging.getfreeport()
 
   if 'AIRFLOWPORT' in  os.environ:
       airflowport = os.environ['AIRFLOWPORT']
@@ -345,7 +466,6 @@ def getparams(**context):
         externalport = os.environ['EXTERNALPORT']
         
   tss = os.environ['TSS']          
-  sd = context['dag'].dag_id 
   task_instance = context['task_instance']
     
   if tss == "1":  
@@ -391,8 +511,13 @@ def getparams(**context):
   task_instance.xcom_push(key="{}_VIPERPORTPRODUCE".format(sname),value="_{}".format(VIPERPORT))
   task_instance.xcom_push(key="{}_VIPERHOSTPREPROCESS".format(sname),value=VIPERHOSTPREPROCESS)
   task_instance.xcom_push(key="{}_VIPERPORTPREPROCESS".format(sname),value="_{}".format(VIPERPORTPREPROCESS))
+  task_instance.xcom_push(key="{}_VIPERHOSTPREPROCESS1".format(sname),value=VIPERHOSTPREPROCESS1)
+  task_instance.xcom_push(key="{}_VIPERPORTPREPROCESS1".format(sname),value="_{}".format(VIPERPORTPREPROCESS1))
+ 
   task_instance.xcom_push(key="{}_VIPERHOSTPREPROCESS2".format(sname),value=VIPERHOSTPREPROCESS2)
   task_instance.xcom_push(key="{}_VIPERPORTPREPROCESS2".format(sname),value="_{}".format(VIPERPORTPREPROCESS2))
+  task_instance.xcom_push(key="{}_VIPERHOSTPREPROCESS3".format(sname),value=VIPERHOSTPREPROCESS3)
+  task_instance.xcom_push(key="{}_VIPERPORTPREPROCESS3".format(sname),value="_{}".format(VIPERPORTPREPROCESS3))
 
   task_instance.xcom_push(key="{}_VIPERHOSTPREPROCESSPGPT".format(sname),value=VIPERHOSTPREPROCESSPGPT)
   task_instance.xcom_push(key="{}_VIPERPORTPREPROCESSPGPT".format(sname),value="_{}".format(VIPERPORTPREPROCESSPGPT))
@@ -407,6 +532,7 @@ def getparams(**context):
   task_instance.xcom_push(key="{}_HPDEHOSTPREDICT".format(sname),value=HPDEHOSTPREDICT)
   task_instance.xcom_push(key="{}_HPDEPORTPREDICT".format(sname),value="_{}".format(HPDEPORTPREDICT))
   task_instance.xcom_push(key="{}_solutionname".format(sd),value=sname)
+  task_instance.xcom_push(key="{}_projectname".format(sd),value=pname)
   task_instance.xcom_push(key="{}_solutiondescription".format(sname),value=desc)
   task_instance.xcom_push(key="{}_solutiontitle".format(sname),value=stitle)
 

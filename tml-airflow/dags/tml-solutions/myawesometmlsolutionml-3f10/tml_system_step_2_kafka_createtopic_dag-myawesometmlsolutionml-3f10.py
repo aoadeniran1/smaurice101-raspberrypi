@@ -34,20 +34,18 @@ default_args = {
 
 ######################################## DO NOT MODIFY BELOW #############################################
 
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_2_kafka_createtopic_dag_myawesometmlsolutionml-3f10", default_args=default_args, tags=["tml_system_step_2_kafka_createtopic_dag_myawesometmlsolutionml-3f10"], start_date=datetime(2023, 1, 1), schedule=None,catchup=False)
-def startkafkasetup():
-    def empty():
-        pass
-dag = startkafkasetup()
 
 def deletetopics(topic):
-    
+
+    if 'KUBE' in os.environ:
+       if os.environ['KUBE'] == "1":
+         return
     buf = "/Kafka/kafka_2.13-3.0.0/bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic {} --delete".format(topic)
-    res=subprocess.call(buf, shell=True)
-    print(buf)
-    print("Result=",res)
     
+    proc=subprocess.run(buf, shell=True)
+    #proc.terminate()
+    #proc.wait()
+                
     repo=tsslogging.getrepo()    
     tsslogging.tsslogit("Deleting topic {} in {}".format(topic,os.path.basename(__file__)), "INFO" )                     
     tsslogging.git_push("/{}".format(repo),"Entry from {}".format(os.path.basename(__file__)),"origin")  
@@ -147,5 +145,4 @@ def setupkafkatopics(**context):
        tsslogging.tsslogit("Cannot create topic {} in {} - {}".format(topic,os.path.basename(__file__),e), "ERROR" )                     
        tsslogging.git_push("/{}".format(repo),"Entry from {}".format(os.path.basename(__file__)),"origin")  
         
-      print("Result=",result)
   tsslogging.locallogs("INFO", "STEP 2: Completed")

@@ -21,7 +21,7 @@ default_args = {
   'producerid' : 'iotsolution',   # <<< *** Change as needed   
   'raw_data_topic' : 'iot-preprocess', # *************** INCLUDE ONLY ONE TOPIC - This is one of the topic you created in SYSTEM STEP 2
   'preprocess_data_topic' : 'iot-preprocess2', # *************** INCLUDE ONLY ONE TOPIC - This is one of the topic you created in SYSTEM STEP 2
-  'maxrows' : '800', # <<< ********** Number of offsets to rollback the data stream -i.e. rollback stream by 500 offsets
+  'maxrows' : '350', # <<< ********** Number of offsets to rollback the data stream -i.e. rollback stream by 500 offsets
   'offset' : '-1', # <<< Rollback from the end of the data streams  
   'brokerhost' : '',   # <<< *** Leave as is
   'brokerport' : '-999',  # <<< *** Leave as is   
@@ -36,21 +36,13 @@ default_args = {
   'tmlfilepath' : '', # leave blank
   'usemysql' : '1', # do not modify
   'streamstojoin' : 'Voltage_preprocessed_AnomProb,Current_preprocessed_AnomProb', # Change as needed - THESE VARIABLES ARE CREATED BY TML IN tml_system_step_4_kafka_preprocess2_dag.py
-  'identifier' : 'IoT device performance and failures', # <<< ** Change as needed - THIS IS TAKING AVG of variables in streamstojoin
+  'identifier' : 'IoT device performance and failures', # <<< ** Change as needed
   'preprocesstypes' : 'avg,avg', # <<< **** MAIN PREPROCESS TYPES CHNAGE AS NEEDED refer to https://tml-readthedocs.readthedocs.io/en/latest/
   'pathtotmlattrs' : 'oem=n/a,lat=n/a,long=n/a,location=n/a,identifier=n/a', # Change as needed     
   'jsoncriteria' : '', # <<< **** Specify your json criteria. Here is an example of a multiline json --  refer to https://tml-readthedocs.readthedocs.io/en/latest/
-  'identifier' : 'TML solution',   # <<< *** Change as needed   
 }
 
 ######################################## DO NOT MODIFY BELOW #############################################
-
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_4b_kafka_preprocess_dag_myawesometmlsolutionml-3f10", default_args=default_args, tags=["tml_system_step_4b_kafka_preprocess_dag_myawesometmlsolutionml-3f10"], start_date=datetime(2023, 1, 1),schedule=None,catchup=False)
-def startprocessing():
-  def empty():
-     pass
-dag = startprocessing()
 
 VIPERTOKEN=""
 VIPERHOST=""
@@ -120,8 +112,6 @@ def processtransactiondata():
          preprocesstypes=default_args['preprocesstypes']
 
          pathtotmlattrs=default_args['pathtotmlattrs']       
-         raw_data_topic = default_args['raw_data_topic']  
-         preprocess_data_topic = default_args['preprocess_data_topic']  
 
          try:
                 result=maadstml.viperpreprocessproducetotopicstream(VIPERTOKEN,VIPERHOST,VIPERPORT,topic,producerid,offset,maxrows,enabletls,delay,brokerhost,
@@ -142,6 +132,7 @@ def windowname(wtype,sname,dagname):
 def dopreprocessing(**context):
        sd = context['dag'].dag_id
        sname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_solutionname".format(sd))
+       pname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_projectname".format(sd))
        
        VIPERTOKEN = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERTOKEN".format(sname))
        VIPERHOST = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERHOSTPREPROCESS2".format(sname))
@@ -166,17 +157,24 @@ def dopreprocessing(**context):
        ti.xcom_push(key="{}_pathtotmlattrs".format(sname), value=default_args['pathtotmlattrs'])
        ti.xcom_push(key="{}_identifier".format(sname), value=default_args['identifier'])
        ti.xcom_push(key="{}_jsoncriteria".format(sname), value=default_args['jsoncriteria'])
+
+       maxrows=default_args['maxrows']
+       if 'step4bmaxrows' in os.environ:
+         ti.xcom_push(key="{}_maxrows".format(sname), value="_{}".format(os.environ['step4bmaxrows']))         
+         maxrows=os.environ['step4bmaxrows']
+       else:  
+         ti.xcom_push(key="{}_maxrows".format(sname), value="_{}".format(default_args['maxrows']))
         
        repo=tsslogging.getrepo() 
        if sname != '_mysolution_':
-        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,sname,os.path.basename(__file__))  
+        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,pname,os.path.basename(__file__))  
        else:
          fullpath="/{}/tml-airflow/dags/{}".format(repo,os.path.basename(__file__))  
             
        wn = windowname('preprocess2',sname,sd)     
        subprocess.run(["tmux", "new", "-d", "-s", "{}".format(wn)])
        subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "cd /Viper-preprocess2", "ENTER"])
-       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {}".format(fullpath,VIPERTOKEN,HTTPADDR,VIPERHOST,VIPERPORT[1:]), "ENTER"])        
+       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {} {}".format(fullpath,VIPERTOKEN,HTTPADDR,VIPERHOST,VIPERPORT[1:],maxrows), "ENTER"])        
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
@@ -193,6 +191,9 @@ if __name__ == '__main__':
         VIPERTOKEN = sys.argv[2]
         VIPERHOST = sys.argv[3] 
         VIPERPORT = sys.argv[4]                  
+        maxrows =  sys.argv[5]
+        default_args['maxrows'] = maxrows
+         
         tsslogging.locallogs("INFO", "STEP 4b: Preprocessing 2 started")
 
         while True:

@@ -7,7 +7,7 @@ import json
 sys.dont_write_bytecode = True
  
 # defining the api-endpoint
-rest_port = "9001"  # <<< ***** Change Port to match the Server Rest_PORT
+rest_port = "9002"  # <<< ***** Change Port to match the Server Rest_PORT
 httpaddr = "http:" # << Change to https or http
 
 # Modify the apiroute: jsondataline, or jsondataarray
@@ -16,11 +16,18 @@ httpaddr = "http:" # << Change to https or http
 
 apiroute = "jsondataline"
 
-API_ENDPOINT = "{}//localhost:{}/{}".format(httpaddr,rest_port,apiroute)
+# USE THIS ENDPOINT IF TML RUNNING IN DOCKER CONTAINER
+# DOCKER CONTAINER ENDPOINT
+#API_ENDPOINT = "{}//localhost:{}/{}".format(httpaddr,rest_port,apiroute)
+
+# USE THIS ENDPOINT IF TML RUNNING IN KUBERNETES
+# KUBERNETES ENDPOINT
+API_ENDPOINT = "{}//tml.tss/ext/{}".format(httpaddr,apiroute)
  
 def send_tml_data(data): 
   # data to be sent to api
   headers = {'Content-type': 'application/json'}
+  print(API_ENDPOINT)
   r = requests.post(url=API_ENDPOINT, data=json.dumps(data), headers=headers)
 
   # extracting response text
@@ -58,15 +65,18 @@ def readdatafile(inputfile):
       ret = send_tml_data(line)
       print(ret)
       # change time to speed up or slow down data   
-      time.sleep(.5)
+      time.sleep(.1)
     except Exception as e:
       print(e)
-      time.sleep(0.5)
+      time.sleep(0.1)
       pass
     
 def start():
-      inputfile = "IoTDatasample.txt"
+      inputfile = "IoTData.txt"
       readdatafile(inputfile)
         
 if __name__ == '__main__':
-    start()
+    print("RestAPI client file")
+    #Uncomment to make RestAPI client connection
+    #start()
+

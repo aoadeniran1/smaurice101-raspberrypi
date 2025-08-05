@@ -36,9 +36,13 @@ def mqttconnection():
 
 def publishtomqttbroker(client,line):
  
-     client.publish(topic=default_args['mqtt_subscribe_topic'], payload=line, qos=1, retain=False)
-     client.loop()
-
+     b=client.publish(topic=default_args['mqtt_subscribe_topic'], payload=line, qos=1, retain=False)
+     if 'MQTT_ERR_SUCCESS' in str(b):
+        print(line)
+        client.loop()
+     else:
+        print("ERROR Making a connection to HiveMQ:",b)
+  
 def readdatafile(client,inputfile):
 
   ##############################################################
@@ -75,6 +79,7 @@ def readdatafile(client,inputfile):
       time.sleep(.15)
       pass
 
-client=mqttconnection()
-inputfile = "IoTDatasample.txt"
-readdatafile(client,inputfile)
+# UNCOMMENT TO Make client connection to TML server
+#client=mqttconnection()
+#inputfile = "IoTDatasample.txt"
+#readdatafile(client,inputfile)

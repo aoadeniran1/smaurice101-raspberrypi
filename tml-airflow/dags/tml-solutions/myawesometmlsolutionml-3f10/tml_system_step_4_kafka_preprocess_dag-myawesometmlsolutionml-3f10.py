@@ -45,17 +45,10 @@ values=datapoint.value~\
 identifiers=metadata.display_name~\
 datetime=datapoint.updated_at~\
 msgid=datapoint.id~\
-latlong=lat:long', # <<< **** Specify your json criteria. Here is an example of a multiline json --  refer to https://tml-readthedocs.readthedocs.io/en/latest/
+latlong=lat:long' # <<< **** Specify your json criteria. Here is an example of a multiline json --  refer to https://tml-readthedocs.readthedocs.io/en/latest/
 }
 
 ######################################## DO NOT MODIFY BELOW #############################################
-
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_4_kafka_preprocess_dag_myawesometmlsolutionml-3f10", default_args=default_args, tags=["tml_system_step_4_kafka_preprocess_dag_myawesometmlsolutionml-3f10"], start_date=datetime(2023, 1, 1),schedule=None,catchup=False)
-def startprocessing():
-  def empty():
-     pass
-dag = startprocessing()
 
 VIPERTOKEN=""
 VIPERHOST=""
@@ -123,10 +116,7 @@ def processtransactiondata():
 
  # if dataage - use:dataage_utcoffset_timetype
  preprocesstypes=default_args['preprocesstypes']
-
  pathtotmlattrs=default_args['pathtotmlattrs']       
- raw_data_topic = default_args['raw_data_topic']  
- preprocess_data_topic = default_args['preprocess_data_topic']  
     
  try:
     result=maadstml.viperpreprocesscustomjson(VIPERTOKEN,VIPERHOST,VIPERPORT,topic,producerid,offset,jsoncriteria,rawdataoutput,maxrows,enabletls,delay,brokerhost,
@@ -150,7 +140,8 @@ def dopreprocessing(**context):
        tsslogging.locallogs("INFO", "STEP 4: Preprocessing started")
        sd = context['dag'].dag_id
        sname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_solutionname".format(sd))
-       
+       pname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_projectname".format(sd))
+
        VIPERTOKEN = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERTOKEN".format(sname))
        VIPERHOST = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERHOSTPREPROCESS".format(sname))
        VIPERPORT = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERPORTPREPROCESS".format(sname))
@@ -174,17 +165,25 @@ def dopreprocessing(**context):
        ti.xcom_push(key="{}_pathtotmlattrs".format(sname), value=default_args['pathtotmlattrs'])
        ti.xcom_push(key="{}_identifier".format(sname), value=default_args['identifier'])
        ti.xcom_push(key="{}_jsoncriteria".format(sname), value=default_args['jsoncriteria'])
+
+       maxrows=default_args['maxrows']
+       if 'step4maxrows' in os.environ:
+         ti.xcom_push(key="{}_maxrows".format(sname), value="_{}".format(os.environ['step4maxrows']))                
+         maxrows=os.environ['step4maxrows']
+       else:  
+         ti.xcom_push(key="{}_maxrows".format(sname), value="_{}".format(default_args['maxrows']))
+         
         
        repo=tsslogging.getrepo() 
        if sname != '_mysolution_':
-        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,sname,os.path.basename(__file__))  
+        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,pname,os.path.basename(__file__))  
        else:
          fullpath="/{}/tml-airflow/dags/{}".format(repo,os.path.basename(__file__))  
             
        wn = windowname('preprocess',sname,sd)     
        subprocess.run(["tmux", "new", "-d", "-s", "{}".format(wn)])
        subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "cd /Viper-preprocess", "ENTER"])
-       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {}".format(fullpath,VIPERTOKEN,HTTPADDR,VIPERHOST,VIPERPORT[1:]), "ENTER"])        
+       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {} {}".format(fullpath,VIPERTOKEN,HTTPADDR,VIPERHOST,VIPERPORT[1:],maxrows), "ENTER"])        
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
@@ -201,6 +200,9 @@ if __name__ == '__main__':
         VIPERTOKEN = sys.argv[2]
         VIPERHOST = sys.argv[3] 
         VIPERPORT = sys.argv[4]                  
+        maxrows =  sys.argv[5]
+        default_args['maxrows'] = maxrows
+         
         tsslogging.locallogs("INFO", "STEP 4: Preprocessing started")
                      
         while True:

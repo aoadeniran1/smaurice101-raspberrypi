@@ -34,14 +34,14 @@ default_args = {
   'networktimeout' : '600', # <<< *** Change as needed      
   'modelsearchtuner' : '90', # <<< *This parameter will attempt to fine tune the model search space - A number close to 100 means you will have fewer models but their predictive quality will be higher.      
   'dependentvariable' : 'failure', # <<< *** Change as needed, 
-  'independentvariables': 'Voltage_preprocessed_AnomProb,Current_preprocessed_AnomProb', # <<< *** Change as needed, 
-  'rollbackoffsets' : '500', # <<< *** Change as needed, 
+  'independentvariables': 'Power_preprocessed_Trend,Voltage_preprocessed_Trend,Current_preprocessed_Trend', # <<< *** Change as needed, 
+  'rollbackoffsets' : '600', # <<< *** Change as needed, 
   'consumeridtrainingdata2': '', # leave blank
   'partition_training' : '',  # leave blank
   'consumefrom' : '',  # leave blank
   'topicid' : '-1',  # leave as is
   'fullpathtotrainingdata' : '/Viper-ml/viperlogs/iotlogistic',  #  # <<< *** Change as needed - add name for foldername that stores the training datasets
-  'processlogic' : 'classification_name=failure_prob:Voltage_preprocessed_AnomProb=55,n:Current_preprocessed_AnomProb=55,n',  # <<< *** Change as needed, i.e. classification_name=failure_prob:Voltage_preprocessed_AnomProb=55,n:Current_preprocessed_AnomProb=55,n',  # <<< *** Change as needed, i.e. classification_name=failure_prob:Voltage_preprocessed_AnomProb=55,n:Current_preprocessed_AnomProb=55,n
+  'processlogic' : 'classification_name=failure_prob:Power_preprocessed_Trend=-n,0:Voltage_preprocessed_Trend=-n,0:Current_preprocessed_Trend=-n,0',  # <<< *** Change as needed, i.e. classification_name=failure_prob:Voltage_preprocessed_AnomProb=55,n:Current_preprocessed_AnomProb=55,n
   'array' : '0',  # leave as is
   'transformtype' : '', # Sets the model to: log-lin,lin-log,log-log
   'sendcoefto' : '',  # you can send coefficients to another topic for further processing -- MUST BE SET IN STEP 2
@@ -52,13 +52,6 @@ default_args = {
 }
 
 ######################################## DO NOT MODIFY BELOW #############################################
-
-# Instantiate your DAG
-@dag(dag_id="tml_system_step_5_kafka_machine_learning_dag_myawesometmlsolutionml-3f10", default_args=default_args, tags=["tml_system_step_5_kafka_machine_learning_dag_myawesometmlsolutionml-3f10"], schedule=None,catchup=False)
-def startmachinelearning():
-  def empty():
-      pass
-dag = startmachinelearning()
 
 # This sets the lat/longs for the IoT devices so it can be map
 VIPERTOKEN=""
@@ -160,6 +153,7 @@ def windowname(wtype,sname,dagname):
 def startml(**context):
        sd = context['dag'].dag_id
        sname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_solutionname".format(sd))
+       pname=context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_projectname".format(sd))
        
        VIPERTOKEN = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERTOKEN".format(sname))
        VIPERHOST = context['ti'].xcom_pull(task_ids='step_1_solution_task_getparams',key="{}_VIPERHOSTML".format(sname))
@@ -181,7 +175,29 @@ def startml(**context):
        ti.xcom_push(key="{}_modelsearchtuner".format(sname), value="_{}".format(default_args['modelsearchtuner']))
        ti.xcom_push(key="{}_dependentvariable".format(sname), value=default_args['dependentvariable'])
        ti.xcom_push(key="{}_independentvariables".format(sname), value=default_args['independentvariables'])
-       ti.xcom_push(key="{}_rollbackoffsets".format(sname), value="_{}".format(default_args['rollbackoffsets']))
+
+       rollback=default_args['rollbackoffsets']
+       if 'step5rollbackoffsets' in os.environ:
+         ti.xcom_push(key="{}_rollbackoffsets".format(sname), value="_{}".format(os.environ['step5rollbackoffsets']))
+         rollback=os.environ['step5rollbackoffsets']
+       else:  
+         ti.xcom_push(key="{}_rollbackoffsets".format(sname), value="_{}".format(default_args['rollbackoffsets']))
+
+       processlogic=default_args['processlogic']
+       if 'step5processlogic' in os.environ:
+         ti.xcom_push(key="{}_processlogic".format(sname), value="{}".format(os.environ['step5processlogic']))
+         processlogic=os.environ['step5processlogic']
+       else:  
+         ti.xcom_push(key="{}_processlogic".format(sname), value="{}".format(default_args['processlogic']))
+
+       independentvariables=default_args['independentvariables']
+       if 'step5independentvariables' in os.environ:
+         ti.xcom_push(key="{}_independentvariables".format(sname), value="{}".format(os.environ['step5independentvariables']))
+         independentvariables=os.environ['step5independentvariables']
+       else:  
+         ti.xcom_push(key="{}_independentvariables".format(sname), value="{}".format(default_args['independentvariables']))
+
+  
        ti.xcom_push(key="{}_topicid".format(sname), value="_{}".format(default_args['topicid']))
        ti.xcom_push(key="{}_consumefrom".format(sname), value=default_args['consumefrom'])
        ti.xcom_push(key="{}_fullpathtotrainingdata".format(sname), value=default_args['fullpathtotrainingdata'])
@@ -190,19 +206,17 @@ def startml(**context):
        ti.xcom_push(key="{}_coeftoprocess".format(sname), value=default_args['coeftoprocess'])
        ti.xcom_push(key="{}_coefsubtopicnames".format(sname), value=default_args['coefsubtopicnames'])
        ti.xcom_push(key="{}_HPDEADDR".format(sname), value=HPDEADDR)
-       ti.xcom_push(key="{}_processlogic".format(sname), value=default_args['processlogic'])
-
 
        repo=tsslogging.getrepo() 
        if sname != '_mysolution_':
-        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,sname,os.path.basename(__file__))  
+        fullpath="/{}/tml-airflow/dags/tml-solutions/{}/{}".format(repo,pname,os.path.basename(__file__))  
        else:
          fullpath="/{}/tml-airflow/dags/{}".format(repo,os.path.basename(__file__))  
             
        wn = windowname('ml',sname,sd)     
        subprocess.run(["tmux", "new", "-d", "-s", "{}".format(wn)])
        subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "cd /Viper-ml", "ENTER"])
-       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {} {}{} {}".format(fullpath,VIPERTOKEN, HTTPADDR, VIPERHOST, VIPERPORT[1:], HPDEADDR, HPDEHOST, HPDEPORT[1:]), "ENTER"])        
+       subprocess.run(["tmux", "send-keys", "-t", "{}".format(wn), "python {} 1 {} {}{} {} {}{} {} {} \"{}\" \"{}\"".format(fullpath,VIPERTOKEN, HTTPADDR, VIPERHOST, VIPERPORT[1:], HPDEADDR, HPDEHOST, HPDEPORT[1:],rollback,processlogic,independentvariables), "ENTER"])        
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
@@ -221,13 +235,26 @@ if __name__ == '__main__':
         VIPERPORT = sys.argv[4]
         HPDEHOST = sys.argv[5]
         HPDEPORT = sys.argv[6]
+        rollbackoffsets =  sys.argv[7]
+        default_args['rollbackoffsets'] = rollbackoffsets
+        processlogic =  sys.argv[8]
+        default_args['processlogic'] = processlogic
+        independentvariables =  sys.argv[9]
+        default_args['independentvariables'] = independentvariables
+        subprocess.run("rm -rf {}".format(default_args['fullpathtotrainingdata']), shell=True)
         
         tsslogging.locallogs("INFO", "STEP 5: Machine learning started")
+        try: 
+          f = open("/tmux/step5.txt", "w")
+          f.write(default_args['fullpathtotrainingdata'])
+          f.close()
+        except Exception as e:
+          pass
     
         while True:
          try:     
           performSupervisedMachineLearning()
-          time.sleep(1)
+#          time.sleep(10)
          except Exception as e:
           tsslogging.locallogs("ERROR", "STEP 5: Machine Learning DAG in {} {}".format(os.path.basename(__file__),e))
           tsslogging.tsslogit("Machine Learning DAG in {} {}".format(os.path.basename(__file__),e), "ERROR" )                     

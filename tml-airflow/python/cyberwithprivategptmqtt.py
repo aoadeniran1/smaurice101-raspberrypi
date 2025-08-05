@@ -46,12 +46,23 @@ def mqttconnection():
      client.username_pw_set(username, password)     
      client.connect(mqttBroker,mqttport)
 
-     client.subscribe(default_args['mqtt_subscribe_topic'], qos=1)
-     return client
+     b=client.subscribe(default_args['mqtt_subscribe_topic'], qos=1)
+     if 'MQTT_ERR_SUCCESS' in str(b):
+       return client
+     else:
+       return NULL   
 
 def publishtomqttbroker(client,line):
-     print(line)
-     client.publish(topic=default_args['mqtt_subscribe_topic'], payload=line, qos=1, retain=False)
+     try:
+      b=client.publish(topic=default_args['mqtt_subscribe_topic'], payload=line, qos=1, retain=False)
+      if 'MQTT_ERR_SUCCESS' in str(b):
+        print(line)
+      else:
+        print("ERROR Making a connection to HiveMQ:",b)
+   
+     except Exception as e:
+       print(e)
+       
      client.loop()
      
 def formatdataandstream(mainjson,hackedid,client,noping):
